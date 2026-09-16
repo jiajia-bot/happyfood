@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>欢乐美食地图</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
+  #map { width:100%; height:100%; }
+
+  /* 顶部标题栏 */
+  .title-bar {
+    position:absolute; top:0; left:0; right:0; z-index:1000;
+    background:linear-gradient(135deg,#c0392b,#e74c3c);
+    color:#fff; padding:12px 20px; text-align:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.3);
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .title-bar h1 { font-size:20px; font-weight:600; letter-spacing:2px; }
+  .title-bar .food-icon { font-size:24px; }
+
+  /* ===== 地图样式切换按钮 ===== */
+  .style-switcher {
+    position:absolute; top:70px; left:20px; z-index:1000;
+    display:flex; background:#fff; border-radius:24px;
+    box-shadow:0 2px 12px rgba(0,0,0,.18); overflow:hidden;
+  }
+  .style-btn {
+    padding:9px 20px; border:none; background:transparent;
+    font-size:14px; font-weight:600; cursor:pointer; color:#999;
+    transition:all .25s; white-space:nowrap;
+  }
+  .style-btn.active {
+    background:linear-gradient(135deg,#c0392b,#e74c3c); color:#fff;
+  }
+  .style-btn:not(.active):hover { background:#f9f0f0; color:#c0392b; }
+
+  /* 侧边栏 */
+  .sidebar {
+    position:fixed; top:0; right:-480px; width:440px; max-width:90vw;
+    height:100%; background:#fff; z-index:2000;
+    box-shadow:-4px 0 20px rgba(0,0,0,.2);
+    transition:right .35s cubic-bezier(.4,0,.2,1);
+    display:flex; flex-direction:column; overflow-y:auto;
+  }
+  .sidebar.open { right:0; }
+  .sidebar-overlay {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,.3); z-index:1999; display:none;
+  }
+  .sidebar-overlay.show { display:block; }
+  .sidebar-header {
+    color:#fff; padding:20px; position:sticky; top:0; z-index:10;
+  }
+  .sidebar-header.cat-dacan { background:linear-gradient(135deg,#c0392b,#e74c3c); }
+  .sidebar-header.cat-xiaodian { background:linear-gradient(135deg,#2471a3,#2e86c1); }
+  .sidebar-header.cat-tianshui { background:linear-gradient(135deg,#7d3c98,#a569bd); }
+  .sidebar-header h2 { font-size:22px; margin-bottom:6px; }
+  .sidebar-close {
+    position:absolute; top:15px; right:15px; background:rgba(255,255,255,.2);
+    border:none; color:#fff; width:32px; height:32px; border-radius:50%;
+    font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .sidebar-close:hover { background:rgba(255,255,255,.4); }
+  .sidebar-body { padding:20px; flex:1; }
+  .info-section { margin-bottom:20px; }
+  .info-label {
+    font-size:13px; color:#999; margin-bottom:6px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .info-label::before { content:''; width:3px; height:14px; border-radius:2px; }
+  .cat-dacan .info-label::before, .sidebar-body.cat-dacan .info-label::before { background:#e74c3c; }
+  .cat-xiaodian .info-label::before, .sidebar-body.cat-xiaodian .info-label::before { background:#2e86c1; }
+  .cat-tianshui .info-label::before, .sidebar-body.cat-tianshui .info-label::before { background:#a569bd; }
+  .info-value { font-size:15px; color:#333; line-height:1.6; padding-left:9px; }
+  .info-value a { color:#e74c3c; text-decoration:none; }
+  .dish-tag {
+    display:inline-block; padding:4px 12px; border-radius:20px; font-size:13px; margin:3px 4px 3px 0;
+  }
+  .cat-dacan .dish-tag, .dish-tag.cat-dacan { background:#fef0ef; color:#c0392b; border:1px solid #f5c6c0; }
+  .cat-xiaodian .dish-tag, .dish-tag.cat-xiaodian { background:#ebf5fb; color:#2471a3; border:1px solid #aed6f1; }
+  .cat-tianshui .dish-tag, .dish-tag.cat-tianshui { background:#f5eef8; color:#7d3c98; border:1px solid #d7bde2; }
+  .note-box {
+    border-left:3px solid #f0ad4e;
+    padding:10px 14px; border-radius:4px; font-size:14px; color:#8a6d3b;
+    line-height:1.6; background:#fff9e6;
+  }
+
+  /* 图片画廊 */
+  .gallery-section { margin-bottom:20px; }
+  .gallery-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .gallery-item {
+    position:relative; padding-top:100%; border-radius:8px; overflow:hidden;
+    background:#f5f5f5; cursor:pointer;
+  }
+  .gallery-item img {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    object-fit:cover; transition:transform .3s;
+  }
+  .gallery-item:hover img { transform:scale(1.08); }
+  .gallery-placeholder {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#ccc; font-size:12px; gap:4px;
+  }
+  .gallery-placeholder svg { width:32px; height:32px; opacity:.4; }
+
+  /* 灯箱 */
+  .lightbox {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,.9); z-index:3000; display:none;
+    align-items:center; justify-content:center;
+  }
+  .lightbox.show { display:flex; }
+  .lightbox img { max-width:90%; max-height:90%; border-radius:8px; }
+  .lightbox-close {
+    position:absolute; top:20px; right:20px; background:rgba(255,255,255,.2);
+    border:none; color:#fff; width:40px; height:40px; border-radius:50%;
+    font-size:24px; cursor:pointer;
+  }
+  .lightbox-nav {
+    position:absolute; top:50%; transform:translateY(-50%);
+    background:rgba(255,255,255,.2); border:none; color:#fff;
+    width:44px; height:44px; border-radius:50%; font-size:20px; cursor:pointer;
+  }
+  .lightbox-prev { left:20px; }
+  .lightbox-next { right:20px; }
+
+  /* ===== 标准版 水滴pin标记 ===== */
+  .food-marker {
+    position:relative; width:36px; height:44px;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.3));
+    cursor:pointer; transition:transform .2s;
+  }
+  .food-marker:hover { transform:scale(1.15); }
+  .food-marker svg { width:100%; height:100%; }
+
+  /* ===== 极速版 文字标签标记 ===== */
+  .label-marker {
+    white-space:nowrap; cursor:pointer;
+    display:inline-flex; align-items:center; gap:4px;
+    font-family:"PingFang SC","Microsoft YaHei",sans-serif;
+    transition:transform .15s;
+    background:rgba(255,255,255,.72);
+    padding:2px 8px 2px 6px; border-radius:10px;
+    backdrop-filter:blur(2px);
+  }
+  .label-marker:hover { transform:scale(1.12); z-index:999 !important; }
+  .label-dot {
+    width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  }
+  .label-text {
+    font-size:13px; font-weight:600; line-height:1.2;
+  }
+  .label-marker.cat-dacan .label-dot { background:#e74c3c; }
+  .label-marker.cat-dacan .label-text { color:#c0392b; }
+  .label-marker.cat-xiaodian .label-dot { background:#2e86c1; }
+  .label-marker.cat-xiaodian .label-text { color:#1a5276; }
+  .label-marker.cat-tianshui .label-dot { background:#a569bd; }
+  .label-marker.cat-tianshui .label-text { color:#6c3483; }
+  .label-marker.stall { border:1px dashed #f39c12; }
+  .label-marker.stall .label-dot { background:#f39c12; }
+  .label-marker.stall .label-text { color:#d68910; }
+
+  /* 欢乐谷 极速版 地标 */
+  .landmark-label {
+    white-space:nowrap; text-align:center; cursor:pointer;
+  }
+  .landmark-label .lm-name {
+    font-size:18px; font-weight:800; color:#d4a017;
+    text-shadow:0 1px 3px rgba(255,255,255,.9),0 0 8px rgba(255,255,255,.8);
+    letter-spacing:2px;
+  }
+  .landmark-label .lm-sub {
+    font-size:11px; color:#b8860b; margin-top:2px;
+    text-shadow:0 1px 2px rgba(255,255,255,.9);
+  }
+
+  /* 极速版：使用艺术底图叠层，不使用滤镜，避免卡顿 */
+  .art-map { background:#faf6f0; }
+  .art-map .leaflet-tile { opacity:0.12; }
+  .art-overlay { pointer-events:none; }
+
+  /* 图例 */
+  .legend {
+    position:absolute; bottom:20px; left:20px; z-index:1000;
+    background:#fff; border-radius:10px; padding:12px 16px;
+    box-shadow:0 2px 10px rgba(0,0,0,.15); font-size:13px;
+  }
+  .legend-title { font-weight:600; margin-bottom:8px; color:#333; }
+  .legend-item { display:flex; align-items:center; gap:8px; margin:5px 0; }
+  .legend-icon { width:22px; display:flex; justify-content:center; }
+
+  /* 列表按钮 */
+  .list-btn {
+    position:absolute; top:70px; right:20px; z-index:1000;
+    background:#fff; border:none; padding:10px 18px; border-radius:24px;
+    box-shadow:0 2px 10px rgba(0,0,0,.15); cursor:pointer; font-size:14px;
+    color:#c0392b; font-weight:600; display:flex; align-items:center; gap:6px;
+    transition:transform .2s;
+  }
+  .list-btn:hover { transform:scale(1.05); }
+
+  /* 店铺列表面板 */
+  .shop-list-panel {
+    position:fixed; top:0; left:-360px; width:340px; max-width:85vw;
+    height:100%; background:#fff; z-index:2000;
+    box-shadow:4px 0 20px rgba(0,0,0,.2);
+    transition:left .35s cubic-bezier(.4,0,.2,1);
+    display:flex; flex-direction:column;
+  }
+  .shop-list-panel.open { left:0; }
+  .shop-list-header {
+    background:linear-gradient(135deg,#c0392b,#e74c3c);
+    color:#fff; padding:20px; font-size:18px; font-weight:600;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .shop-list-close {
+    background:rgba(255,255,255,.2); border:none; color:#fff;
+    width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:16px;
+  }
+  .shop-list-body { flex:1; overflow-y:auto; padding:8px 0; }
+  .shop-list-item {
+    padding:12px 20px; cursor:pointer; border-bottom:1px solid #f0f0f0;
+    transition:background .15s;
+  }
+  .shop-list-item:hover { background:#fef5f5; }
+  .shop-list-item .name { font-size:15px; color:#333; font-weight:500; }
+  .shop-list-item .addr { font-size:12px; color:#999; margin-top:3px; }
+  .shop-list-item .dish { font-size:12px; margin-top:3px; }
+  .cat-dot {
+    display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle;
+  }
+  .cat-dot.dacan { background:#e74c3c; }
+  .cat-dot.xiaodian { background:#2e86c1; }
+  .cat-dot.tianshui { background:#a569bd; }
+  .dish-text-dacan { color:#c0392b; }
+  .dish-text-xiaodian { color:#2471a3; }
+  .dish-text-tianshui { color:#7d3c98; }
+
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-thumb { background:#ddd; border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:#bbb; }
+
+  @keyframes pulse {
+    0% { transform:scale(1); opacity:.4; }
+    70% { transform:scale(1.8); opacity:0; }
+    100% { transform:scale(1.8); opacity:0; }
+  }
+
+  @media (max-width:600px) {
+    .sidebar { width:100%; max-width:100%; right:-100%; }
+    .gallery-grid { grid-template-columns:repeat(2,1fr); }
+    .title-bar h1 { font-size:17px; }
+    .style-btn { padding:8px 14px; font-size:13px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="title-bar">
+  <span class="food-icon">🍜</span>
+  <h1>欢乐美食地图</h1>
+  <span class="food-icon">🥟</span>
+</div>
+
+<!-- 地图样式切换 -->
+<div class="style-switcher">
+  <button class="style-btn active" data-style="standard" onclick="switchMapStyle('standard')">🗺️ 标准版</button>
+  <button class="style-btn" data-style="art" onclick="switchMapStyle('art')">🎨 极速版</button>
+</div>
+
+<button class="list-btn" onclick="toggleShopList()">
+  <span>📋</span> 店铺列表
+</button>
+
+<div id="map"></div>
+
+<!-- 图例 -->
+<div class="legend" id="legend">
+  <div class="legend-title">图例</div>
+  <div class="legend-item">
+    <span class="legend-icon"><svg width="20" height="24" viewBox="0 0 36 44"><path d="M18 0C8 0 0 8 0 18c0 12 18 26 18 26s18-14 18-26C36 8 28 0 18 0z" fill="#e74c3c"/><circle cx="18" cy="16" r="9" fill="#fff"/><text x="18" y="21" text-anchor="middle" font-size="14">🍴</text></svg></span>
+    <span><span class="cat-dot dacan"></span>大餐（餐厅/正餐）</span>
+  </div>
+  <div class="legend-item">
+    <span class="legend-icon"><svg width="20" height="24" viewBox="0 0 36 44"><path d="M18 0C8 0 0 8 0 18c0 12 18 26 18 26s18-14 18-26C36 8 28 0 18 0z" fill="#2e86c1"/><circle cx="18" cy="16" r="9" fill="#fff"/><text x="18" y="21" text-anchor="middle" font-size="14">🍜</text></svg></span>
+    <span><span class="cat-dot xiaodian"></span>小店（粉面/快餐/摊位）</span>
+  </div>
+  <div class="legend-item">
+    <span class="legend-icon"><svg width="20" height="24" viewBox="0 0 36 44"><path d="M18 0C8 0 0 8 0 18c0 12 18 26 18 26s18-14 18-26C36 8 28 0 18 0z" fill="#a569bd"/><circle cx="18" cy="16" r="9" fill="#fff"/><text x="18" y="21" text-anchor="middle" font-size="14">🍰</text></svg></span>
+    <span><span class="cat-dot tianshui"></span>糖水·下午茶·酒吧</span>
+  </div>
+</div>
+
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header cat-dacan" id="sbHeader">
+    <button class="sidebar-close" onclick="closeSidebar()">✕</button>
+    <h2 id="sbName"></h2>
+    <div id="sbCategory" style="font-size:13px;opacity:.85;"></div>
+  </div>
+  <div class="sidebar-body cat-dacan" id="sbBody">
+    <div class="gallery-section" id="sbGallery"></div>
+    <div class="info-section">
+      <div class="info-label">📍 地址</div>
+      <div class="info-value" id="sbAddress"></div>
+    </div>
+    <div class="info-section" id="sbHoursSection">
+      <div class="info-label">🕐 营业时间</div>
+      <div class="info-value" id="sbHours"></div>
+    </div>
+    <div class="info-section" id="sbPhoneSection">
+      <div class="info-label">📞 电话</div>
+      <div class="info-value" id="sbPhone"></div>
+    </div>
+    <div class="info-section" id="sbDishSection">
+      <div class="info-label">🍽️ 招牌菜</div>
+      <div class="info-value" id="sbDishes"></div>
+    </div>
+    <div class="info-section" id="sbNoteSection" style="display:none;">
+      <div class="info-label">💬 食评</div>
+      <div class="note-box" id="sbNote"></div>
+    </div>
+  </div>
+</div>
+
+<div class="shop-list-panel" id="shopListPanel">
+  <div class="shop-list-header">
+    <span>🍴 全部美食 (<span id="shopCount"></span>)</span>
+    <button class="shop-list-close" onclick="toggleShopList()">✕</button>
+  </div>
+  <div class="shop-list-body" id="shopListBody"></div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="lightbox-nav lightbox-prev" onclick="event.stopPropagation();prevLightbox()">‹</button>
+  <img id="lightboxImg" src="" alt="">
+  <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation();nextLightbox()">›</button>
+</div>
+
+<script>
+const restaurants = [
+  {
+    id: 1,
+    name: "胡杨新疆餐厅",
+    lat: 22.5378, lng: 113.9785,
+    address: "南山区荔枝苑（世界之窗地铁站A口步行360米）",
+    hours: "10:30-22:00",
+    phone: "",
+    dishes: ["羊肉串","烤包子","干煸炒面","新疆炒米粉","馕包肉"],
+    note: "",
+    icon: "🍢",
+    cat: "dacan"
+  },
+  {
+    id: 2,
+    name: "辉记牛肉店（欢乐谷三分店）",
+    lat: 22.5382, lng: 113.9718,
+    address: "南山区深圳欢乐谷西2门西150米",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["牛肉粿条","牛百叶","胸口油"],
+    note: "",
+    icon: "🥩",
+    cat: "xiaodian"
+  },
+  {
+    id: 3,
+    name: "汕头辉记肠粉王（欢乐谷店）",
+    lat: 22.538, lng: 113.971,
+    address: "南山区佛山街1-6号（世界之窗地铁站A口步行350米）",
+    hours: "07:00-22:00",
+    phone: "0755-83986639",
+    dishes: ["青菜肠粉","芝麻酱拌粿条"],
+    note: "",
+    icon: "🍥",
+    cat: "xiaodian"
+  },
+  {
+    id: 4,
+    name: "包馔夜包子（南山欢乐谷店）",
+    lat: 22.539, lng: 113.9735,
+    address: "南山区潮州西街22号华侨城公交公司综合楼112",
+    hours: "17:00-次日02:00",
+    phone: "",
+    dishes: ["青菜包","鲜肉烧卖"],
+    note: "主打川味麻辣、火锅味小笼包的夜包子品牌，傍晚开门凌晨打烊。",
+    icon: "🥟",
+    cat: "xiaodian"
+  },
+  {
+    id: 5,
+    name: "焼肉ライク·烧肉LIKE（益田假日店）",
+    lat: 22.537436, lng: 113.975103,
+    address: "深南大道9028号益田假日广场B2层B2-19",
+    hours: "11:00-22:00",
+    phone: "0755-36854410",
+    dishes: ["烤牛五花"],
+    note: "",
+    icon: "🥓",
+    cat: "dacan"
+  },
+  {
+    id: 6,
+    name: "老碗会（南山益田假日广场店）",
+    lat: 22.537436, lng: 113.975103,
+    address: "益田假日广场B2-33",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["凉皮（冰的，蔬菜多，清爽，夏天来一份非常好）","辣椒油"],
+    note: "",
+    icon: "🍜",
+    cat: "xiaodian"
+  },
+  {
+    id: 7,
+    name: "盛香亭转转热卤（深圳南山益田店）",
+    lat: 22.537436, lng: 113.975103,
+    address: "益田假日广场B2-M10-M16号",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["转转热卤"],
+    note: "2025年8月新开。",
+    icon: "🍲",
+    cat: "xiaodian"
+  },
+  {
+    id: 8,
+    name: "裕莲茶楼",
+    lat: 22.537436, lng: 113.975103,
+    address: "益田假日广场B1-18（星巴克旁边）",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["黑芝麻冰淇淋","焦糖可颂蛋挞（焦糖很酥脆，蛋挞很嫩，味道浓郁）"],
+    note: "老上海风格茶楼，焦糖可颂蛋挞12元一个，层层酥脆不油腻。",
+    icon: "🥧",
+    cat: "tianshui"
+  },
+  {
+    id: 9,
+    name: "煲珠公·老红糖珍珠奶茶",
+    lat: 22.537436, lng: 113.975103,
+    address: "益田假日广场B2层",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["红糖珍珠水牛奶"],
+    note: "",
+    icon: "🧋",
+    cat: "tianshui"
+  },
+  {
+    id: 10,
+    name: "香蜜轩（世界之窗店）",
+    lat: 22.5352, lng: 113.9738,
+    address: "世界之窗西侧欧风街1号楼（深南大道9037号）",
+    hours: "11:00-14:00 / 17:00-21:00",
+    phone: "0755-25000333",
+    dishes: ["蚝仔烙（和在漳州古城吃到的一样）","海鲜自助餐"],
+    note: "",
+    icon: "🦪",
+    cat: "dacan"
+  },
+  {
+    id: 11,
+    name: "蛇口吴记鸡煲·脆皮鸡（白石洲店）",
+    lat: 22.54, lng: 113.9685,
+    address: "石洲中路55号国际市长交流中心",
+    hours: "11:00-14:00 / 17:00-22:00",
+    phone: "",
+    dishes: ["烤鸡（外皮像玻璃纸酥脆，鸡肉嫩滑多汁，沾辣椒粉绝了）","无花果鸡煲","老盐黄皮汁"],
+    note: "烤鸡上桌切忌拍照，要立刻开始撕咬鸡腿！这时候再喝一口老盐黄皮汁，会感到十分满足！",
+    icon: "🍗",
+    cat: "dacan"
+  },
+  {
+    id: 12,
+    name: "顺德公猪肚鸡（白石洲店）",
+    lat: 22.5395, lng: 113.9675,
+    address: "石洲中路路边（白石洲地铁站D口步行210米），博耐家居一楼",
+    hours: "11:00-次日03:00",
+    phone: "0755-86705466",
+    dishes: ["猪肚鸡锅底","鱼皮饺"],
+    note: "",
+    icon: "🍲",
+    cat: "dacan"
+  },
+  {
+    id: 13,
+    name: "李记湛光蚝莊",
+    lat: 22.5402, lng: 113.967,
+    address: "石洲中路160-8号",
+    hours: "17:30-次日02:30",
+    phone: "",
+    dishes: ["蚝","菠萝","炒米粉"],
+    note: "",
+    icon: "🦪",
+    cat: "dacan"
+  },
+  {
+    id: 14,
+    name: "化州爽爽甜品（白石洲店）",
+    lat: 22.542, lng: 113.968,
+    address: "白石洲白石一街17号",
+    hours: "12:00-次日01:00",
+    phone: "",
+    dishes: ["绿豆海底椰糖水"],
+    note: "",
+    icon: "🍧",
+    cat: "tianshui"
+  },
+  {
+    id: 15,
+    name: "亮哥牛杂",
+    lat: 22.54215, lng: 113.96815,
+    address: "化州爽爽糖水门口摆摊（门口摊位，无固定铺面）",
+    hours: "约17:00-23:00（出摊时间不定）",
+    phone: "",
+    dishes: ["牛杂（沙茶味浓，花生油很香）"],
+    note: "本人在深圳吃过最好吃的牛杂，很干净，沙茶味道浓郁，花生油很香。在爽爽糖水门口摆摊，没有固定位置。",
+    icon: "🥘",
+    cat: "xiaodian"
+    ,stall: true
+  },
+  {
+    id: 16,
+    name: "小龍牛肉面",
+    lat: 22.543, lng: 113.97,
+    address: "白石洲东四坊99号103",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["幺拖幺加豌豆黄"],
+    note: "来一份幺拖幺加豌豆黄实在是太美妙啦。",
+    icon: "🍜",
+    cat: "xiaodian"
+  },
+  {
+    id: 17,
+    name: "光明乳鸽",
+    lat: 22.5387, lng: 113.9801,
+    address: "南山区兴隆西街华侨城综合市场",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["红烧乳鸽","椒盐乳鸽","鸽子粥"],
+    note: "",
+    icon: "🕊️",
+    cat: "dacan"
+  },
+  {
+    id: 18,
+    name: "丰记汕头牛肉丸",
+    lat: 22.5385, lng: 113.98,
+    address: "兴隆西街华侨城综合市场107",
+    hours: "08:00-20:00",
+    phone: "",
+    dishes: ["牛腩饭","马鲛鱼丸"],
+    note: "",
+    icon: "🥩",
+    cat: "xiaodian"
+  },
+  {
+    id: 19,
+    name: "潮悦粉面店（华·生活馆店）",
+    lat: 22.5383, lng: 113.9798,
+    address: "兴隆西街2-2号华侨城综合市场",
+    hours: "08:00-20:00",
+    phone: "",
+    dishes: ["花甲","鱼侧","瘦肉肉饼炒河粉"],
+    note: "",
+    icon: "🍜",
+    cat: "xiaodian"
+  },
+  {
+    id: 20,
+    name: "云肴四季·山林料理",
+    lat: 22.5386, lng: 113.9803,
+    address: "华侨城综合市场正门38号档",
+    hours: "10:00-21:00",
+    phone: "",
+    dishes: ["百香果烤肉拌饭","红三剁拌杂粮饭"],
+    note: "",
+    icon: "🍱",
+    cat: "xiaodian"
+  },
+  {
+    id: 21,
+    name: "新印尼酒家",
+    lat: 22.5395, lng: 113.9765,
+    address: "侨城西街10号鸿波酒店二楼",
+    hours: "07:30-22:30",
+    phone: "0755-26920888",
+    dishes: ["鲜虾烧卖"],
+    note: "",
+    icon: "🍤",
+    cat: "dacan"
+  },
+  {
+    id: 22,
+    name: "潮巷·潮州粿条（华侨城店）",
+    lat: 22.5384, lng: 113.9802,
+    address: "兴隆西街2号华·生活馆1楼",
+    hours: "10:30-22:00",
+    phone: "",
+    dishes: ["猪肉粿条（猪肉新鲜有坚果香味）"],
+    note: "这家的猪肉很新鲜，有坚果香味。",
+    icon: "🍜",
+    cat: "xiaodian"
+  },
+  {
+    id: 23,
+    name: "胡哥烤肥牛（生态广场A座店）",
+    lat: 22.538, lng: 113.9835,
+    address: "华侨城生态广场A区109（华侨城站B口550米）",
+    hours: "17:00-次日01:00",
+    phone: "13028887992",
+    dishes: ["淄博小饼牛肉taco"],
+    note: "谁会不想用淄博小饼做一份牛肉taco呢？",
+    icon: "🥩",
+    cat: "dacan"
+  },
+  {
+    id: 24,
+    name: "Peng's Cafe·鹏咖啡",
+    lat: 22.5375, lng: 113.9842,
+    address: "华侨城生态广场",
+    hours: "10:00-22:00",
+    phone: "",
+    dishes: ["酸菜炒五花趾","猪杂汤（酱油蘸料很好吃）"],
+    note: "",
+    icon: "☕",
+    cat: "tianshui"
+  },
+  {
+    id: 25,
+    name: "润园四季椰子鸡（华侨城LOFT店）",
+    lat: 22.543, lng: 113.9825,
+    address: "香山东街东部市场4楼",
+    hours: "10:00-23:00",
+    phone: "0755-29128886",
+    dishes: ["椰子鸡"],
+    note: "深圳椰子鸡头部品牌，2009年创立。",
+    icon: "🍲",
+    cat: "dacan"
+  },
+  {
+    id: 26,
+    name: "央宗米线-出自云南",
+    lat: 22.5445, lng: 113.9855,
+    address: "文昌南街1-3（创意园北区A3-106）",
+    hours: "10:30-21:00",
+    phone: "0755-86233299",
+    dishes: ["大理拌米线","保山烧肉米线","卤豆腐"],
+    note: "",
+    icon: "🍜",
+    cat: "xiaodian"
+  },
+  {
+    id: 27,
+    name: "PEAT",
+    lat: 22.5455, lng: 113.9858,
+    address: "华侨城创意文化园北园B1栋1层101A",
+    hours: "18:00-次日02:00",
+    phone: "13302973661",
+    dishes: ["木姜子拿铁","鸡尾酒"],
+    note: "创意园里的咖啡馆+酒吧，白天咖啡夜晚鸡尾酒。",
+    icon: "🍸",
+    cat: "tianshui"
+  },
+  {
+    id: 28,
+    name: "水演记 SHAPE of WATER",
+    lat: 22.5438, lng: 113.987,
+    address: "华侨城创意文化园南区F3栋101-1层",
+    hours: "09:30-19:30",
+    phone: "",
+    dishes: ["玛格丽特披萨"],
+    note: "「水演万物」的咖啡空间，也有披萨。",
+    icon: "🍕",
+    cat: "tianshui"
+  },
+  {
+    id: 29,
+    name: "佰味佳客家砵仔菜（竹子林店）",
+    lat: 22.5365, lng: 114.0125,
+    address: "福田区竹子林四路光大银行2层北座",
+    hours: "11:00-14:00 / 17:00-21:30",
+    phone: "0755-83524198",
+    dishes: ["葱油鸡","花甲肉煮鱼豆腐"],
+    note: "有年头的客家菜馆，几道招牌菜相当地道，人均约75元。",
+    icon: "🍗",
+    cat: "dacan"
+  },
+  {
+    id: 30,
+    name: "百草堂祖传凉茶铺",
+    lat: 22.4855, lng: 113.9185,
+    address: "南山区蛇口新街207号（蛇口影剧院对面，地铁2号线东角头站D口）",
+    hours: "10:00-次日02:00",
+    phone: "0755-21619683",
+    dishes: ["芒果血糯米牛奶冰","草莓芒果牛奶冰（有草莓果酱，像惊喜一样特别美妙）"],
+    note: "2000年开业的老字号，虽名凉茶铺但糖水更出名，100多种糖水，排队2小时也要吃。",
+    icon: "🍧",
+    cat: "tianshui"
+  },
+  {
+    id: 31,
+    name: "深圳大中华喜来登酒店·怡聚轩",
+    lat: 22.538, lng: 114.06,
+    address: "福田区福华一路1号大中华国际交易广场1层（会展中心地铁站）",
+    hours: "早餐06:30-10:30 / 午餐12:00-14:30 / 晚餐18:00-21:30",
+    phone: "0755-82826207",
+    dishes: ["三文鱼","海南鸡饭","巧克力布朗尼","红酒"],
+    note: "五星级酒店全日制自助餐厅，菜品涵盖中式、东南亚及西式，适合家庭聚餐。",
+    icon: "🍽️",
+    cat: "dacan"
+  },
+  {
+    id: 32,
+    name: "大鸽饭（福田COCO Park店）",
+    lat: 22.5375, lng: 114.055,
+    address: "福田区福华三路268号福田星河COCO Park商场三楼L3-021号（购物公园站C口90米）",
+    hours: "11:00-21:30",
+    phone: "13600476660",
+    dishes: ["红烧乳鸽","招牌鸽煲饭"],
+    note: "广州米其林推介餐厅，中式古典装修，主打鲜嫩乳鸽，人均100-150元。",
+    icon: "🕊️",
+    cat: "dacan"
+  }
+];
+
+// 分类配置
+const CAT_CONFIG = {
+  dacan:    { label:'大餐', color:'#e74c3c', colorDark:'#c0392b', colorLight:'#ec7063', emoji:'🍴' },
+  xiaodian: { label:'小店', color:'#2e86c1', colorDark:'#2471a3', colorLight:'#5dade2', emoji:'🍜' },
+  tianshui: { label:'糖水·下午茶·酒吧', color:'#a569bd', colorDark:'#7d3c98', colorLight:'#bb8fce', emoji:'🍰' }
+};
+
+// ========== 初始化地图 ==========
+const map = L.map('map', {
+  center: [22.5375, 113.9731],
+  zoom: 14,
+  zoomControl: true
+});
+
+// 标准版：高德地图瓦片
+const gaodeLayer = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+  subdomains: ['1','2','3','4'],
+  maxZoom: 19,
+  attribution: '&copy; 高德地图'
+});
+gaodeLayer.addTo(map);
+
+// ========== 极速版：艺术底图叠层 ==========
+// 地理边界基于地图中白石洲、世界之窗、侨城北、侨城东四个地铁站对齐
+const artBounds = [[22.5180, 113.9500], [22.5630, 114.0100]];
+const artOverlay = L.imageOverlay('images/basemap_art.jpg', artBounds, {
+  className: 'art-overlay',
+  opacity: 1,
+  zIndex: 10,
+  interactive: false
+});
+artOverlay.addTo(map);
+
+// ========== 图层组 ==========
+const standardLayer = L.layerGroup();
+const artLayer = L.layerGroup().addTo(map);
+let centerMarkerStandard = null;
+let centerMarkerArt = null;
+let currentStyle = 'art';
+
+// ========== 欢乐谷中心标记（标准版） ==========
+function createCenterStandard() {
+  return L.marker([22.5375, 113.9731], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">' +
+        '<div style="position:absolute;width:40px;height:40px;background:#ff4757;border-radius:50%;opacity:.2;animation:pulse 2s infinite;"></div>' +
+        '<div style="position:relative;width:28px;height:28px;background:linear-gradient(135deg,#ff6b6b,#c0392b);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(192,57,43,.4);"><span style="font-size:14px;">🎢</span></div></div>',
+      iconSize: [40,40], iconAnchor: [20,20]
+    }),
+    zIndexOffset: 1000
+  }).bindTooltip('<b>深圳欢乐谷</b><br/>地图中心', { direction:'top', offset:[0,-18] });
+}
+
+// ========== 欢乐谷中心标记（极速版） ==========
+function createCenterArt() {
+  return L.marker([22.5375, 113.9731], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div class="landmark-label"><div class="lm-name">🎢 欢乐谷</div><div class="lm-sub">欢乐美食地图中心</div></div>',
+      iconSize: [0,0], iconAnchor: [0,0]
+    }),
+    zIndexOffset: 500,
+    interactive: false
+  });
+}
+
+centerMarkerStandard = createCenterStandard().addTo(standardLayer);
+centerMarkerArt = createCenterArt().addTo(artLayer);
+
+// ========== 创建标准版水滴pin ==========
+function createPinIcon(r) {
+  const cfg = CAT_CONFIG[r.cat];
+  const isStall = r.stall;
+  const color = isStall ? '#f39c12' : cfg.colorDark;
+  const colorLight = isStall ? '#f5b041' : cfg.colorLight;
+  const gid = 'pin' + r.id;
+  return L.divIcon({
+    className: '',
+    html: '<div class="food-marker">' +
+      '<svg viewBox="0 0 36 44" xmlns="http://www.w3.org/2000/svg">' +
+      '<defs><linearGradient id="'+gid+'" x1="0%" y1="0%" x2="0%" y2="100%">' +
+      '<stop offset="0%" style="stop-color:'+colorLight+'"/>' +
+      '<stop offset="100%" style="stop-color:'+color+'"/>' +
+      '</linearGradient></defs>' +
+      '<path d="M18 0C8 0 0 8 0 18c0 12 18 26 18 26s18-14 18-26C36 8 28 0 18 0z" fill="url(#'+gid+')"/>' +
+      (isStall ? '<path d="M18 0C8 0 0 8 0 18c0 12 18 26 18 26s18-14 18-26C36 8 28 0 18 0z" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="3,2"/>' : '') +
+      '<ellipse cx="18" cy="17" rx="11" ry="11" fill="#fff" opacity="0.95"/>' +
+      '<text x="18" y="22" text-anchor="middle" font-size="15" dominant-baseline="middle">'+r.icon+'</text>' +
+      '</svg></div>',
+    iconSize: [36,44], iconAnchor: [18,42], popupAnchor: [0,-40]
+  });
+}
+
+// ========== 创建极速版文字标签 ==========
+function createLabelIcon(r) {
+  const isStall = r.stall;
+  const catClass = isStall ? 'stall' : 'cat-'+r.cat;
+  return L.divIcon({
+    className: '',
+    html: '<div class="label-marker '+catClass+'">' +
+      '<span class="label-dot"></span>' +
+      '<span class="label-text">'+r.name+'</span>' +
+      '</div>',
+    iconSize: [0,0],
+    iconAnchor: [0,0]
+  });
+}
+
+// ========== 创建所有标记 ==========
+const markers = {};
+const standardMarkers = {};
+const artMarkers = {};
+
+restaurants.forEach(r => {
+  // 标准版
+  const mStd = L.marker([r.lat, r.lng], {
+    icon: createPinIcon(r),
+    title: r.name
+  });
+  mStd.on('click', () => openSidebar(r));
+  mStd.addTo(standardLayer);
+  standardMarkers[r.id] = mStd;
+
+  // 极速版
+  const mArt = L.marker([r.lat, r.lng], {
+    icon: createLabelIcon(r),
+    title: r.name
+  });
+  mArt.on('click', () => openSidebar(r));
+  mArt.addTo(artLayer);
+  artMarkers[r.id] = mArt;
+
+  markers[r.id] = mStd;
+});
+
+// ========== 样式切换 ==========
+function switchMapStyle(style) {
+  if (style === currentStyle) return;
+  currentStyle = style;
+
+  document.querySelectorAll('.style-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.style === style);
+  });
+
+  const mapEl = document.getElementById('map');
+  if (style === 'art') {
+    map.removeLayer(standardLayer);
+    artLayer.addTo(map);
+    artOverlay.addTo(map);
+    mapEl.classList.add('art-map');
+  } else {
+    map.removeLayer(artLayer);
+    standardLayer.addTo(map);
+    map.removeLayer(artOverlay);
+    mapEl.classList.remove('art-map');
+  }
+}
+
+// ========== 侧边栏 ==========
+let currentGalleryImages = [];
+let currentGalleryIndex = 0;
+
+function openSidebar(r) {
+  const cfg = CAT_CONFIG[r.cat];
+  const header = document.getElementById('sbHeader');
+  const body = document.getElementById('sbBody');
+  header.className = 'sidebar-header cat-'+r.cat;
+  body.className = 'sidebar-body cat-'+r.cat;
+
+  document.getElementById('sbName').textContent = r.name;
+  document.getElementById('sbCategory').textContent =
+    (r.stall ? '🚩 门口摊位 · ' : '') + cfg.label;
+  document.getElementById('sbAddress').textContent = r.address;
+  document.getElementById('sbHours').textContent = r.hours || '暂无数据';
+  document.getElementById('sbPhone').innerHTML = r.phone
+    ? '<a href="tel:'+r.phone+'">'+r.phone+'</a>' : '暂无数据';
+
+  const dishContainer = document.getElementById('sbDishes');
+  dishContainer.innerHTML = r.dishes.map(d =>
+    '<span class="dish-tag cat-'+r.cat+'">'+d+'</span>'
+  ).join('');
+
+  const noteSection = document.getElementById('sbNoteSection');
+  if (r.note) {
+    noteSection.style.display = 'block';
+    document.getElementById('sbNote').textContent = r.note;
+  } else {
+    noteSection.style.display = 'none';
+  }
+
+  // 画廊
+  const gallery = document.getElementById('sbGallery');
+  gallery.innerHTML =
+    '<div class="info-label">📷 美食图片</div>' +
+    '<div class="gallery-grid">' +
+    Array.from({length:6},(_,i)=>{
+      const idx=i+1;
+      return '<div class="gallery-item" onclick="openLightbox('+r.id+','+idx+')">' +
+        '<img src="images/'+r.id+'_'+idx+'.jpg" alt="'+r.name+'-'+idx+'" ' +
+        'onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.ph\').style.display=\'flex\'">' +
+        '<div class="gallery-placeholder ph" style="display:none;">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
+        '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
+        '<circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>' +
+        '<span>待上传</span></div></div>';
+    }).join('') +
+    '</div>' +
+    '<div style="font-size:11px;color:#bbb;margin-top:8px;padding-left:9px;">' +
+    '图片放入 images/ 文件夹，命名格式：'+r.id+'_1.jpg ~ '+r.id+'_6.jpg</div>';
+
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebarOverlay').classList.add('show');
+  map.panTo([r.lat, r.lng], { animate:true });
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('show');
+}
+
+// ========== 灯箱 ==========
+function openLightbox(id, index) {
+  const img = document.getElementById('lightboxImg');
+  const src = 'images/'+id+'_'+index+'.jpg';
+  const testImg = new Image();
+  testImg.onload = function() {
+    img.src = src;
+    currentGalleryImages = Array.from({length:6},(_,i)=>'images/'+id+'_'+(i+1)+'.jpg');
+    currentGalleryIndex = index - 1;
+    document.getElementById('lightbox').classList.add('show');
+  };
+  testImg.onerror = function() {};
+  testImg.src = src;
+}
+function closeLightbox(e) {
+  if (e && e.target.tagName === 'IMG') return;
+  document.getElementById('lightbox').classList.remove('show');
+}
+function prevLightbox() {
+  currentGalleryIndex = (currentGalleryIndex - 1 + 6) % 6;
+  const img = document.getElementById('lightboxImg');
+  const parts = img.src.split('/');
+  const id = parseInt(parts[parts.length-1]);
+  img.src = 'images/'+id+'_'+(currentGalleryIndex+1)+'.jpg';
+}
+function nextLightbox() {
+  currentGalleryIndex = (currentGalleryIndex + 1) % 6;
+  const img = document.getElementById('lightboxImg');
+  const parts = img.src.split('/');
+  const id = parseInt(parts[parts.length-1]);
+  img.src = 'images/'+id+'_'+(currentGalleryIndex+1)+'.jpg';
+}
+
+// ========== 店铺列表 ==========
+function toggleShopList() {
+  document.getElementById('shopListPanel').classList.toggle('open');
+}
+function buildShopList() {
+  document.getElementById('shopCount').textContent = restaurants.length;
+  const body = document.getElementById('shopListBody');
+  body.innerHTML = restaurants.map(r => {
+    const stallTag = r.stall ? ' <span style="font-size:11px;color:#f39c12;">[摊位]</span>' : '';
+    return '<div class="shop-list-item" onclick="focusShop('+r.id+')">' +
+      '<div class="name"><span class="cat-dot '+r.cat+'"></span>'+r.icon+' '+r.name+stallTag+'</div>' +
+      '<div class="addr">'+r.address.substring(0,30)+(r.address.length>30?'...':'')+'</div>' +
+      '<div class="dish dish-text-'+r.cat+'">'+r.dishes.slice(0,2).join(' / ')+'</div>' +
+      '</div>';
+  }).join('');
+}
+function focusShop(id) {
+  const r = restaurants.find(x => x.id === id);
+  if (!r) return;
+  map.setView([r.lat, r.lng], 16, { animate:true });
+  openSidebar(r);
+  document.getElementById('shopListPanel').classList.remove('open');
+}
+buildShopList();
+
+// 键盘
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeSidebar();
+    closeLightbox();
+    document.getElementById('shopListPanel').classList.remove('open');
+  }
+  if (document.getElementById('lightbox').classList.contains('show')) {
+    if (e.key === 'ArrowLeft') prevLightbox();
+    if (e.key === 'ArrowRight') nextLightbox();
+  }
+});
+</script>
+</body>
+</html>

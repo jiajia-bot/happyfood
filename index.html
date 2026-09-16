@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>加加美食地图</title>
+    <style>
+       * { margin: 0; padding: 0; box-sizing: border-box; }
+
+       /* 区域大标题，比如"白石洲" */
+       h3{
+        font-size: 15px;
+        color: rgb(131, 131, 131);
+        margin-bottom: 18px;   /* 标题和下面图片的距离，想大改大，想小改小 */
+       }
+
+       .area-container{
+        max-width:900px;
+        margin:0 auto;
+        padding:20px;
+       }
+
+       .area-block{
+        margin-bottom:60px;
+       }
+
+       /* 卡片网格：两列均分 */
+       .hotspot-grid{
+        display:grid;
+        gap:30px;
+       }
+       .grid-2col{
+        grid-template-columns: 1fr 1fr;
+       }
+
+       /* 单个店铺卡片：圆形图片按钮 */
+       .shop-card{
+        width:85%;
+        aspect-ratio: 1 / 1;          /* 宽=高，正方形 */
+        border-radius: 10%;           /* 边缘倒角 */
+        border: none;
+        outline: none;
+        cursor: pointer;
+        /* 图片铺满整个圆，没有图时显示灰色 */
+        background-color: rgb(236, 233, 233, 0);
+        background-size: cover;
+        background-position: center;
+        justify-self: center;         /* 在格子里居中 */
+        transition: transform 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+       }
+       .shop-card:active{
+        transform: scale(0.95);       /* 按下去时缩小一点，反馈手感 */
+       }
+
+       /* ===== 以下是弹窗样式 ===== */
+       .popup-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 999;
+        padding: 20px;
+       }
+       .popup-overlay.active { display: flex; }
+
+       .popup-card {
+        background: #fff;
+        border-radius: 28px;
+        max-width: 340px;
+        width: 100%;
+        padding: 30px 24px 24px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        animation: slideUp 0.3s ease;
+       }
+       @keyframes slideUp {
+        from { transform: translateY(30px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+       }
+
+       .popup-card .shop-name {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1a1a1a;
+        margin-bottom: 6px;
+       }
+       .popup-card .shop-tag {
+        display: inline-block;
+        font-size: 12px;
+        color: #818181;
+        background: #fff0eb;
+        padding: 2px 12px;
+        border-radius: 20px;
+        margin-bottom: 14px;
+       }
+       .popup-card .dish-list {
+        margin: 12px 0 18px;
+        padding-left: 0;
+        list-style: none;
+       }
+       .popup-card .dish-list li {
+        font-size: 15px;
+        color: #333;
+        padding: 6px 0;
+        border-bottom: 1px solid #f0edea;
+        display: flex;
+        align-items: center;
+       }
+
+       .popup-card .dish-list li:last-child { border-bottom: none; }
+       .popup-card .close-btn {
+        display: block;
+        width: 100%;
+        padding: 12px 0;
+        margin-top: 12px;
+        background: #f5f0eb;
+        border: none;
+        border-radius: 40px;
+        font-size: 16px;
+        font-weight: 500;
+        color: #555;
+        cursor: pointer;
+        text-align: center;
+       }
+
+       /* 设计卡片样式 */
+        .card a {
+          position:fixed;
+            top: 20px;
+            right: 5px;
+            background: rgb(247, 246, 246);
+            backdrop-filter: blur(6px);
+            z-index: 999;
+            color: #2c2c2c;
+            padding: 8px  16px;
+            border-radius: 15px;      /* 圆角 */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* 阴影 */
+            font-size: 13px;
+            text-align: center;
+            }
+    </style>
+</head>
+<body>
+  <div class="area-container">
+
+    <div class="card"><a href="ditubanben/dituban.html">地图版本</a></div>
+
+    <!-- 白石洲区域 -->
+    <div class="area-block">
+      <h3>白石洲</h3>
+      <div class="hotspot-grid grid-2col">
+        <button class="shop-card"
+          data-name="顺德公猪肚鸡"
+          data-tag="火锅"
+          data-dishes="胡椒猪肚鸡|腊味煲仔饭|腐竹"
+          style="background-image:url('images/shop1.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="爽爽糖水"
+          data-dishes="绿豆海底椰糖水|杨枝甘露|斑斓河粉|牛奶冰"
+          style="background-image:url('images/shop2.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="亮哥牛杂"
+          data-dishes="本人在深圳吃过最好吃的牛杂，很干净，沙茶味道浓郁，花生油很香"
+          style="background-image:url('images/shop3.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="李记湛光蚝莊"
+          data-dishes="蒜蓉生蚝|芝士生蚝|炒米粉|徐闻菠萝"
+          style="background-image:url('images/shop4.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="蛇口吴记鸡煲·脆皮鸡"
+          data-dishes="美食指南|烤鸡：烤鸡上桌切忌拍照，要立刻开始撕咬鸡腿！|它的外皮像玻璃纸一样酥脆，鸡肉嫩滑多汁，沾一些辣椒粉，简直是美味极了，这时候再喝一口老盐黄皮汁，会感到十分地满足！！|无花果鸡煲|老盐黄皮汁|推荐蘸料：拿若干小青柠汁打底，放香菜梗，加一勺小米辣，加一勺酱油，蘸鸡味道绝美"
+          style="background-image:url('images/shop5.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="小龍牛肉面"
+          data-dishes="来一份幺拖幺加豌豆黄实在是太美妙啦"
+          style="background-image:url('images/shop6.jpg');">
+        </button>
+      </div>
+    </div>
+
+    <!-- 世界之窗站区域 -->
+    <div class="area-block">
+      <h3>世界之窗站</h3>
+      <div class="hotspot-grid grid-2col">
+        <button class="shop-card"
+          data-name="香蜜轩"
+          data-dishes="蚝仔烙：和我在漳州古城吃到的一样|忘不了鱼:鱼如其名，脆鳞果香鱼|海鲜自助餐，这家蘸料里的蒜蓉比较好吃"
+          style="background-image:url('images/shop7.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="新疆餐厅"
+          data-dishes="我最喜欢在新疆餐厅吃一些帕米尔高原上的小羊羔了|烤羊肉串|干煸炒面|新疆炒米粉|馕包肉：好好吃呀，非常juicy的肉，搭配香香的馕|大盘鸡"
+          style="background-image:url('images/shop8.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="辉记牛肉店"
+          data-dishes="五花趾粿条|吊龙粿条|牛百叶|胸口油|这家的沙茶酱好吃得很突出，小米辣也剁得细细的，如果在家自制调料，可以学习这种方式。|我一般点一份吊龙粿条，拿两个小碗。|一个放一勺小米辣，放一勺芹菜梗，两勺花生芝麻酱，一勺沙茶酱（注意这里一定要先放芝麻花生酱再放沙茶酱）。|粿条上了以后先吃肉，这时的肉是最嫩的，同时把粿条捞到另一个小碗里晾凉，喝几口牛肉汤以后，把第一个小碗里的调料蒯到第二个小碗的粿条里，芝麻的香气会和粿条完美融合。"
+          style="background-image:url('images/shop9.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="汕头辉记肠粉王"
+          data-dishes="青菜肠粉|芝麻酱拌粿条"
+          style="background-image:url('images/shop10.jpg');">
+        </button>
+      </div>
+    </div>
+
+    <!-- 生态广场区域 -->
+    <div class="area-block">
+      <h3>生态广场</h3>
+      <div class="hotspot-grid grid-2col">
+        <button class="shop-card"
+          data-name="Peng's Cafe"
+          data-dishes="酸菜炒五花趾|客家八刀汤：这家的酱油好吃，猪肉食材很新鲜，很脆，有坚果香气"
+          style="background-image:url('images/shop12.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="新印尼餐厅"
+          data-dishes="猪红汤：必吃|排骨蒸饭|鲜虾烧卖|叉烧包"
+          style="background-image:url('images/shop13.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="胡哥烤肥牛"
+          data-dishes="要把小饼烤到微脆，把肥牛和酸菜放在饼里，做一个taco吃，吃了这个就会明白，为什么墨西哥人喜欢吃taco"
+          style="background-image:url('images/shop21.jpg');">
+        </button>
+
+        <button class="shop-card"
+          data-name="云肴四季"
+          data-dishes="百香果菠萝烤肉饭：百香果和菠萝搭配油滋滋的烤肉很香哦，一点也不腻|红三剁盖饭|小炒肉饭：我曾经在昆明火车站旁边吃过一家炒菜，回来深圳找了很久都没有那种味道，这道菜和它有些相似。花开两朵，各表一枝"
+          style="background-image:url('images/shop14.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="潮悦粉面店"
+          data-dishes="是自选配菜、主食、做法的美味小店"
+          style="background-image:url('images/shop11.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="潮汕牛肉 综合市场店"
+          data-dishes="！牛腩饭：这牛腩饭真是夯爆了！|沙茶拌面"
+          style="background-image:url('images/shop15.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="潮巷·潮州粿条（华侨城店）"
+          data-dishes="牛腩饭"
+          style="background-image:url('images/shop16.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="光明乳鸽"
+          data-dishes="鸽子汤|鸽子粥|红烧乳鸽|韭菜饺子"
+          style="background-image:url('images/shop17.jpg');">
+        </button>
+        <button class="shop-card"
+          data-name="小西北"
+          data-dishes="凉皮"
+          style="background-image:url('images/shop18.jpg');">
+        </button>
+      </div>
+    </div>
+
+    <!-- 华侨城创意园区域 -->
+    <div class="area-block">
+      <h3>华侨城创意园</h3>
+      <div class="hotspot-grid grid-2col">
+
+        <button class="shop-card"
+          data-name="央宗米线-出自云南"
+          data-dishes="大理拌米线|小锅辣的|保山烧肉米线|豆花米线|这家的花椒酱很好吃"
+          style="background-image:url('images/shop19.jpg');">
+        </button>
+
+        <button class="shop-card"
+          data-name="水演记"
+          data-dishes="玛格丽特披萨|晚上可以在这里喝点东西,写 美食地图 的代码"
+          style="background-image:url('images/shop20.jpg');">
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== 弹窗结构 ===== -->
+  <div class="popup-overlay" id="popup">
+    <div class="popup-card">
+      <div class="shop-name" id="popName">店名</div>
+      <span class="shop-tag" id="popTag">标签</span>
+      <ul class="dish-list" id="popDishes"></ul>
+      <button class="close-btn" id="popClose">关闭</button>
+    </div>
+  </div>
+
+  <script>
+    // 1. 给每一个店铺卡片绑定点击事件
+    document.querySelectorAll('.shop-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        // 读取这个卡片上写好的 data-* 信息
+        var name   = this.dataset.name;
+        var tag    = this.dataset.tag || '';
+        var dishes = this.dataset.dishes.split('|'); // 用 | 分隔 -> 拆成多行
+
+        // 填进弹窗
+        document.getElementById('popName').textContent = name;
+        document.getElementById('popTag').textContent  = tag;
+        // 没有写标签就不显示标签那一行
+        document.getElementById('popTag').style.display = tag ? 'inline-block' : 'none';
+
+        var html = '';
+        dishes.forEach(function(d){
+          d = d.trim();
+          if(d) html += '<li>' + d + '</li>';
+        });
+        document.getElementById('popDishes').innerHTML = html;
+
+        // 显示弹窗（加上 active 类）
+        document.getElementById('popup').classList.add('active');
+      });
+    });
+
+    // 2. 点"关闭"按钮
+    document.getElementById('popClose').addEventListener('click', function(){
+      document.getElementById('popup').classList.remove('active');
+    });
+
+    // 3. 点弹窗外面的灰色遮罩也能关闭
+    document.getElementById('popup').addEventListener('click', function(e){
+      if(e.target === this) this.classList.remove('active');
+    });
+  </script>
+</body>
+</html>
